@@ -1,0 +1,51 @@
+# Compile easysolar.exe (Vulkan + repli CPU) et le teste sur le runner, qui n'a pas de GPU : c'est le cas « CPU seul ».
+name: windows
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: windows-2025
+    env:
+      VULKAN_VERSION: 1.4.357.0  # même version que le CI de llama.cpp
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: SDK Vulkan
+        run: |
+          curl.exe -o $env:RUNNER_TEMP/VulkanSDK-Installer.exe -L "https://sdk.lunarg.com/sdk/download/${env:VULKAN_VERSION}/windows/vulkansdk-windows-X64-${env:VULKAN_VERSION}.exe"
+          & "$env:RUNNER_TEMP\VulkanSDK-Installer.exe" --accept-licenses --default-answer --confirm-command install
+          Add-Content $env:GITHUB_ENV "VULKAN_SDK=C:\VulkanSDK\${env:VULKAN_VERSION}"
+          Add-Content $env:GITHUB_PATH "C:\VulkanSDK\${env:VULKAN_VERSION}\bin"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app
+
+      - name: Compilation
+        working-directory: app
+        run: cargo build --release
+
+      - name: Paquet (exe + vulkan-1.dll)
+        run: |
+          New-Item -ItemType Directory dist | Out-Null
+          Copy-Item app\target\release\easysolar.exe dist\
+          Get-ChildItem C:\VulkanSDK, C:\Windows\System32 -Recurse -Filter vulkan-1.dll -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+          $dll = Get-ChildItem C:\VulkanSDK -Recurse -Filter vulkan-1.dll | Select-Object -First 1
+          if (-not $dll) { $dll = Get-Item C:\Windows\System32\vulkan-1.dll }
+          Copy-Item $dll.FullName dist\
+          Get-ChildItem dist
+
+      - name: Test recherche sur CPU
+        run: |
+          New-Item -ItemType Directory dist\models | Out-Null
+          curl.exe -L -o dist\models\Qwen3-Embedding-0.6B-Q8_0.gguf https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf
+          dist\easysolar.exe --search questions.txt | Tee-Object -FilePath search.txt
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          if ((Get-Content search.txt).Count -ne 20) { Write-Error "20 lignes attendues"; exit 1 }
+          Compare-Object (Get-Content app\tests\search_attendu.txt -Encoding utf8) (Get-Content search.txt -Encoding utf8) | Format-Table -AutoSize -Wrap
+          Remove-Item -Recurse dist\models
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: easysolar-windows
+          path: dist

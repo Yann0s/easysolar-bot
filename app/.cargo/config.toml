@@ -1,0 +1,6 @@
+# Windows : CRT liée en statique (Rust et llama.cpp), l'exe ne demande pas le redistribuable Visual C++.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[env]
+LLAMA_STATIC_CRT = "1"

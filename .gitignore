@@ -1,0 +1,10 @@
+models/
+*.gguf
+.venv/
+bin/
+sft/out/
+sft/llama.cpp/
+app/target/
+__pycache__/
+Claude_Victron-Energy.md
+.DS_Store

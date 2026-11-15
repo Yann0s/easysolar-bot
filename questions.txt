@@ -1,0 +1,20 @@
+Que signifie la LED Alarm qui clignote ?
+La LED Inverter clignote, qu'est-ce que ça veut dire ?
+Comment changer un réglage avec les DIP switches ?
+Quelle est la puissance PV maximale pour la version 12 V ?
+Quelle tension PV minimale faut-il pour que le chargeur solaire démarre ?
+Combien de chaînes de panneaux peut-on brancher ?
+Quelle est la plage de température de stockage ?
+Le chargeur ne fonctionne pas, que dois-je vérifier ?
+Que fait la position « charger only » du commutateur ?
+Quelle est la différence entre les phases bulk, absorption et float ?
+Quand se termine la phase d'absorption du chargeur solaire ?
+Peut-on brancher une deuxième batterie ?
+Quelle section de câble batterie faut-il utiliser ?
+Quel est le rendement maximal du convertisseur ?
+Comment fonctionne le relais programmable ?
+À quoi sert le mode BatterySafe ?
+Puis-je utiliser l'appareil dans une salle de bain humide ?
+Quel est le prix de l'EasySolar ?
+Comment connecter l'EasySolar en Bluetooth à mon téléphone ?
+Quelle est la capitale de l'Australie ?
