@@ -1,4 +1,4 @@
-# EasySolar bot — état du projet (15/11/2026)
+# EasySolar bot — état du projet (15/11/2026, fin d'après-midi)
 
 Assistant de support en français pour l'EasySolar 1600 (manuel Victron), petit LLM local + RAG, à packager ensuite en application autonome (Rust).
 
@@ -12,6 +12,7 @@ Assistant de support en français pour l'EasySolar 1600 (manuel Victron), petit 
 | RAG BM25, LFM3-1.7B avec raisonnement | 10/10 répondues, 10 vides | parfait mais ~100 s/question |
 | RAG BM25, LFM3-1.7B + LoRA | ~16/20 | réponses propres et citées ; rate phases de charge, 2e batterie |
 | **RAG embeddings, LFM3-1.7B + LoRA** | **~17/20** | **montage actuel**, 40 s pour 20 questions ; rate 2e batterie (page 12 non trouvée), fin d'absorption solaire (mélange avec le chargeur secteur) ; DIP et câbles incomplets |
+| RAG embeddings, LoRA réentraîné sur extraits embeddings | ~17/20 | **pas retenu** : invente sur « LED Inverter clignote » et une « annexe A, point S » ; perte dev remonte après la 1re passe (0,60 → 0,63) → `models/LFM3-1.7B-easysolar-emb-Q4_K_M.gguf`, `resultats_rag_emb_sft-emb.md` |
 | LFM3-VL-2B pour transcrire les schémas | ✗ | se trompe sur les liaisons (borne 2/10 inversées) → abandonné |
 
 Les scores avant le 15/11 comptaient faux le refus sur « LED Inverter clignote » : vérifié sur le PDF (pages 8-9), aucun état ne fait clignoter Inverter, le refus est la bonne réponse.
@@ -25,12 +26,24 @@ Recherche seule (page source dans le top 3, 153 questions de `sft/qa.py`) : BM25
 - `run.sh [questions.txt]` : lance les deux serveurs ; `MODEL=models/x.gguf ./run.sh` ; sans argument = interactif.
 - `models/` : `LFM3-1.7B-easysolar-Q4_K_M.gguf` (fine-tuné) et `Qwen3-Embedding-0.6B-Q8_0.gguf`.
 - `sft/qa.py` : 171 paires de référence (18 refus) ; `sft/build_sft.py` → `sft/train.jsonl` / `sft/dev.jsonl` ; `sft/train_mac.sh [--smoke]` : chaîne complète LoRA → GGUF → test (TRL + PEFT sur MPS, ~1 h ; mlx-lm ne gère pas LFM3).
-- `resultats_rag_emb_sft.md` : sortie du dernier test.
+- `models/LFM3-1.7B-easysolar-Q4_K_M.gguf` = modèle retenu (copie : `-bm25`).
+- `resultats_rag_emb_sft.md` : sortie du test du montage actuel.
+- `app/` : application Rust (llama-cpp-2), voir ci-dessous.
+
+## Application Rust (`app/`)
+- Un binaire : manuel et consignes compilés dedans, modèles lus dans `models/` à côté de l'exe (ou `$EASYSOLAR_MODELS`). `easysolar [questions.txt]`, `--search` = pages seulement, `EASYSOLAR_LOG=1` = messages llama.cpp.
+- Mêmes pages trouvées que `rag.py` sur les 20 questions ; réponses équivalentes (écarts dus au tirage).
+- llama-cpp-2 pris depuis git (rev 955aa2f724) : la version crates.io 0.1.161 n'a pas LFM3. Sans OpenMP.
+- Mac : Metal, binaire de 11 Mo ne dépendant que de frameworks système. Build : `cd app && cargo build --release` (Rust via `brew install rust`).
+- Windows : CI GitHub Actions (`.github/workflows/windows.yml`, dépôt privé github.com/Yann0s/easysolar-bot) → artefact `easysolar.exe` (47 Mo, CRT statique) + `vulkan-1.dll`. Vulkan si GPU, sinon CPU.
+  Pièges réglés : chemins > 260 caractères (`core.longpaths` + `CARGO_NET_GIT_FETCH_WITH_CLI`) ; llama.cpp en /MD malgré `LLAMA_STATIC_CRT` (CMP0091) → `app/cmake/msvc-static-crt.cmake`.
+  Sur le runner sans GPU : mêmes pages que le Mac, **mais 48 min de démarrage et 26 s par question** → diagnostic en cours.
 
 ## Prochaines étapes
-1. Relire les réponses de `sft/qa.py` (valeurs électriques).
-2. Optionnel : réentraîner le LoRA (`sft/train_mac.sh`) pour que les exemples utilisent les extraits trouvés par les embeddings (le modèle actuel a été entraîné avec des extraits BM25).
-3. Application Rust (llama-cpp-2) : embarquer les deux GGUF, précalculer les vecteurs des paragraphes.
+1. Lenteur Windows : identifier la cause (Vulkan logiciel pris pour un GPU ? coût fixe par appel ?) puis corriger.
+2. Relire les réponses de `sft/qa.py` (valeurs électriques).
+3. Distribution : le modèle fine-tuné n'est pas en ligne (release GitHub privée ?) ; précalculer les vecteurs des paragraphes pour accélérer le démarrage sur CPU.
+4. Si réentraînement : 2 passes au lieu de 3 (sur-apprentissage après la 1re).
 
 ## Notes
 - Dans la version FR du manuel, la température de stockage est « 40 °C à +60 °C » : le signe moins manque déjà dans le PDF.
@@ -38,5 +51,5 @@ Recherche seule (page source dans le top 3, 153 questions de `sft/qa.py`) : BM25
 - Il faut llama.cpp ≥ 1.0.0 (la build Homebrew 9620 ne connaît pas lfm3).
 
 ## Installation sur Mac
-    brew install llama.cpp poppler uv
+    brew install llama.cpp poppler uv rust
     mkdir -p bin/llama-b12183 && for t in llama-server llama-cli llama-mtmd-cli llama-tokenize; do ln -sf "$(which $t)" bin/llama-b12183/$t; done

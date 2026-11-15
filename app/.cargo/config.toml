@@ -1,6 +1,8 @@
 # Windows : CRT liée en statique (Rust et llama.cpp), l'exe ne demande pas le redistribuable Visual C++.
+# x86-64-v3 = AVX2/FMA/F16C : llama-cpp-sys-2 n'active le SIMD de llama.cpp que via les target features Rust
+# (sans, build SSE2 seul : ~100x plus lent). shortcut: exclut les CPU d'avant ~2013 (pré-Haswell), passer à GGML_CPU_ALL_VARIANTS si besoin.
 [target.x86_64-pc-windows-msvc]
-rustflags = ["-C", "target-feature=+crt-static"]
+rustflags = ["-C", "target-feature=+crt-static", "-C", "target-cpu=x86-64-v3"]
 
 [env]
 LLAMA_STATIC_CRT = "1"
