@@ -37,13 +37,14 @@ Recherche seule (page source dans le top 3, 153 questions de `sft/qa.py`) : BM25
 - Mac : Metal, binaire de 11 Mo ne dépendant que de frameworks système. Build : `cd app && cargo build --release` (Rust via `brew install rust`).
 - Windows : CI GitHub Actions (`.github/workflows/windows.yml`, dépôt privé github.com/Yann0s/easysolar-bot) → artefact `easysolar.exe` (47 Mo, CRT statique) + `vulkan-1.dll`. Vulkan si GPU, sinon CPU.
   Pièges réglés : chemins > 260 caractères (`core.longpaths` + `CARGO_NET_GIT_FETCH_WITH_CLI`) ; llama.cpp en /MD malgré `LLAMA_STATIC_CRT` (CMP0091) → `app/cmake/msvc-static-crt.cmake`.
-  Sur le runner sans GPU : mêmes pages que le Mac, **mais 48 min de démarrage et 26 s par question** → diagnostic en cours.
+  Sur le runner sans GPU : mêmes pages que le Mac, **mais ~27 s par appel d'embedding** (démarrage 48 min) → **Windows abandonné le 15/11**, CI désactivé (`gh workflow enable windows` pour reprendre).
+  Écarté par mesure : Vulkan (tout tourne sur CPU, aucun périphérique), SIMD (AVX2/FMA actifs via `target-cpu=x86-64-v3`), taille du contexte (8192 → 1024 sans effet). Le même code sur le CPU du Mac fait 0,1–0,2 s par appel.
+  Pistes non testées : compiler avec clang-cl au lieu de MSVC, réactiver OpenMP, threads (4 par défaut sur 4 vCPU), tester sur un vrai PC plutôt que le runner GitHub.
 
 ## Prochaines étapes
-1. Lenteur Windows : identifier la cause (Vulkan logiciel pris pour un GPU ? coût fixe par appel ?) puis corriger.
-2. Relire les réponses de `sft/qa.py` (valeurs électriques).
-3. Distribution : le modèle fine-tuné n'est pas en ligne (release GitHub privée ?) ; précalculer les vecteurs des paragraphes pour accélérer le démarrage sur CPU.
-4. Si réentraînement : 2 passes au lieu de 3 (sur-apprentissage après la 1re).
+1. Relire les réponses de `sft/qa.py` (valeurs électriques).
+2. Distribution : le modèle fine-tuné n'est pas en ligne (release GitHub privée ?) ; précalculer les vecteurs des paragraphes pour accélérer le démarrage sur CPU.
+3. Si réentraînement : 2 passes au lieu de 3 (sur-apprentissage après la 1re).
 
 ## Notes
 - Dans la version FR du manuel, la température de stockage est « 40 °C à +60 °C » : le signe moins manque déjà dans le PDF.
