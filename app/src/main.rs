@@ -24,6 +24,7 @@ const TASK: &str = "Instruct: Given a user question about a solar inverter, retr
 const TOP_K: usize = 3;
 const MAX_TOKENS: usize = 300;
 const N_CTX: u32 = 8192;
+const EMB_CTX: u32 = 1024; // plus long paragraphe du manuel : 907 tokens
 
 type R<T> = Result<T, Box<dyn Error>>;
 
@@ -56,10 +57,11 @@ fn chunks(pages: &[String]) -> Vec<(usize, String)> {
 }
 
 fn context<'a>(model: &'a LlamaModel, backend: &LlamaBackend, embeddings: bool) -> R<LlamaContext<'a>> {
+    let n_ctx = if embeddings { EMB_CTX } else { N_CTX };
     let params = LlamaContextParams::default()
-        .with_n_ctx(NonZeroU32::new(N_CTX))
-        .with_n_batch(N_CTX)
-        .with_n_ubatch(if embeddings { N_CTX } else { 512 })
+        .with_n_ctx(NonZeroU32::new(n_ctx))
+        .with_n_batch(n_ctx)
+        .with_n_ubatch(if embeddings { n_ctx } else { 512 })
         .with_embeddings(embeddings)
         .with_pooling_type(if embeddings { LlamaPoolingType::Last } else { LlamaPoolingType::Unspecified });
     Ok(model.new_context(backend, params)?)
