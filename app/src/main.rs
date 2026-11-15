@@ -3,6 +3,7 @@
 //! Usage : easysolar [questions.txt]            (sans fichier : une question par ligne sur l'entrée standard)
 //!         easysolar --search [questions.txt]   (affiche seulement les pages trouvées)
 //! Les modèles sont lus dans le dossier models/ à côté de l'exécutable, ou dans $EASYSOLAR_MODELS.
+//! EASYSOLAR_LOG=1 affiche les messages de llama.cpp (périphériques détectés, etc.).
 use llama_cpp_2::context::LlamaContext;
 use llama_cpp_2::context::params::{LlamaContextParams, LlamaPoolingType};
 use llama_cpp_2::llama_backend::LlamaBackend;
@@ -148,7 +149,9 @@ fn main() -> R<()> {
         None => Box::new(std::io::stdin().lock()),
     };
 
-    llama_cpp_2::send_logs_to_tracing(llama_cpp_2::LogOptions::default().with_logs_enabled(false));
+    if std::env::var_os("EASYSOLAR_LOG").is_none() {
+        llama_cpp_2::send_logs_to_tracing(llama_cpp_2::LogOptions::default().with_logs_enabled(false));
+    }
     let backend = LlamaBackend::init()?;
     let gpu = LlamaModelParams::default().with_n_gpu_layers(1000);
     let emb_model = LlamaModel::load_from_file(&backend, dir.join(EMB_MODEL), &gpu)?;

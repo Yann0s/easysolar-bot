@@ -38,10 +38,33 @@ jobs:
           Copy-Item $dll.FullName dist\
           Get-ChildItem dist
 
-      - name: Test recherche sur CPU
+      - name: Modèle d'embeddings
         run: |
           New-Item -ItemType Directory dist\models | Out-Null
           curl.exe -L -o dist\models\Qwen3-Embedding-0.6B-Q8_0.gguf https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf
+          Get-Content questions.txt -TotalCount 1 -Encoding utf8 | Set-Content q1.txt -Encoding utf8
+
+      - name: Diagnostic Vulkan (périphériques détectés, 1 question)
+        timeout-minutes: 10
+        continue-on-error: true
+        env:
+          EASYSOLAR_LOG: "1"
+        run: |
+          $t = Measure-Command { dist\easysolar.exe --search q1.txt 2>&1 | Select-String -Pattern 'vulkan|device|Vulkan|CPU|->' | Select-Object -First 40 | Out-Host }
+          "Durée avec Vulkan : $($t.TotalSeconds) s"
+
+      - name: Diagnostic sans Vulkan (1 question)
+        timeout-minutes: 10
+        continue-on-error: true
+        env:
+          GGML_VK_VISIBLE_DEVICES: "none"  # valeur non numérique : aucun périphérique Vulkan
+        run: |
+          $t = Measure-Command { dist\easysolar.exe --search q1.txt | Out-Host }
+          "Durée sans Vulkan : $($t.TotalSeconds) s"
+
+      - name: Test recherche (20 questions)
+        timeout-minutes: 20
+        run: |
           dist\easysolar.exe --search questions.txt | Tee-Object -FilePath search.txt
           if ($LASTEXITCODE -ne 0) { exit 1 }
           if ((Get-Content search.txt).Count -ne 20) { Write-Error "20 lignes attendues"; exit 1 }
