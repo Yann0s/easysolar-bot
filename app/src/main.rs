@@ -149,16 +149,31 @@ fn main() -> R<()> {
         None => Box::new(std::io::stdin().lock()),
     };
 
-    if std::env::var_os("EASYSOLAR_LOG").is_none() {
+    let log = std::env::var_os("EASYSOLAR_LOG").is_some();
+    if !log {
         llama_cpp_2::send_logs_to_tracing(llama_cpp_2::LogOptions::default().with_logs_enabled(false));
     }
+    let t0 = std::time::Instant::now();
     let backend = LlamaBackend::init()?;
+    if log {
+        let info = unsafe { std::ffi::CStr::from_ptr(llama_cpp_sys_2::llama_print_system_info()) };
+        eprintln!("[easysolar] system info : {}", info.to_string_lossy());
+    }
     let gpu = LlamaModelParams::default().with_n_gpu_layers(1000);
     let emb_model = LlamaModel::load_from_file(&backend, dir.join(EMB_MODEL), &gpu)?;
     let mut emb_ctx = context(&emb_model, &backend, true)?;
     let pages = pages();
     let chunks = chunks(&pages);
-    let vectors = chunks.iter().map(|(_, c)| embed(&mut emb_ctx, &emb_model, c)).collect::<R<Vec<_>>>()?;
+    if log {
+        eprintln!("[easysolar] {:.1} s : modèle d'embeddings chargé, n_threads = {}", t0.elapsed().as_secs_f32(), LlamaContextParams::default().n_threads());
+    }
+    let mut vectors = Vec::with_capacity(chunks.len());
+    for (_, c) in &chunks {
+        vectors.push(embed(&mut emb_ctx, &emb_model, c)?);
+        if log && vectors.len() <= 3 {
+            eprintln!("[easysolar] {:.1} s : paragraphe {} vectorisé", t0.elapsed().as_secs_f32(), vectors.len());
+        }
+    }
     let chat = if search_only { None } else { Some(LlamaModel::load_from_file(&backend, dir.join(CHAT_MODEL), &gpu)?) };
     let mut chat_ctx = chat.as_ref().map(|m| context(m, &backend, false)).transpose()?;
 

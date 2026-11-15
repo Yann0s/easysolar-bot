@@ -44,11 +44,15 @@ jobs:
           curl.exe -L -o dist\models\Qwen3-Embedding-0.6B-Q8_0.gguf https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf
           Get-Content questions.txt -TotalCount 1 -Encoding utf8 | Set-Content q1.txt -Encoding utf8
 
-      - name: Durée d'une question (démarrage compris)
-        timeout-minutes: 10
+      - name: Diagnostic (capacités CPU, temps par étape, arrêt après 4 min)
+        continue-on-error: true
+        env:
+          EASYSOLAR_LOG: "1"
         run: |
-          $t = Measure-Command { dist\easysolar.exe --search q1.txt | Out-Host }
-          "Durée : $($t.TotalSeconds) s"
+          $p = Start-Process -FilePath dist\easysolar.exe -ArgumentList '--search','q1.txt' -RedirectStandardError err.txt -RedirectStandardOutput out.txt -PassThru -NoNewWindow
+          if (-not $p.WaitForExit(240000)) { $p.Kill(); "Arrêté après 4 min" }
+          Select-String -Path err.txt -Pattern '\[easysolar\]' | ForEach-Object { $_.Line }
+          Get-Content out.txt
 
       - name: Test recherche (20 questions)
         timeout-minutes: 20

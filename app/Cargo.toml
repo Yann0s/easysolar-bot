@@ -7,7 +7,9 @@ edition = "2024"
 # Sans OpenMP (default-features = false) : pas de DLL vcomp140 à livrer sous Windows.
 [target.'cfg(target_os = "macos")'.dependencies]
 llama-cpp-2 = { git = "https://github.com/utilityai/llama-cpp-rs", rev = "955aa2f724", default-features = false, features = ["metal"] }
+llama-cpp-sys-2 = { git = "https://github.com/utilityai/llama-cpp-rs", rev = "955aa2f724", default-features = false, features = ["metal"] }
 
 # Vulkan couvre les GPU NVIDIA/AMD/Intel ; sans GPU compatible, llama.cpp calcule sur le CPU.
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 llama-cpp-2 = { git = "https://github.com/utilityai/llama-cpp-rs", rev = "955aa2f724", default-features = false, features = ["vulkan"] }
+llama-cpp-sys-2 = { git = "https://github.com/utilityai/llama-cpp-rs", rev = "955aa2f724", default-features = false, features = ["vulkan"] }
