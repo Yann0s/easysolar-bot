@@ -4,3 +4,5 @@ rustflags = ["-C", "target-feature=+crt-static"]
 
 [env]
 LLAMA_STATIC_CRT = "1"
+# lu par le crate cmake pour la seule cible Windows : force /MT dans llama.cpp
+CMAKE_TOOLCHAIN_FILE_x86_64_pc_windows_msvc = { value = "cmake/msvc-static-crt.cmake", relative = true }
