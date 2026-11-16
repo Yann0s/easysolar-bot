@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EasySolar 1600</title>
+<style>
+  :root {
+    --blue: #004c97;
+    --blue-dark: #00335f;
+    --blue-light: #e6eef7;
+    --orange: #f39200;
+    --bg: #f2f5f9;
+    --text: #1d2733;
+    --muted: #5d6b7a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; height: 100vh; display: flex; flex-direction: column;
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text);
+  }
+  header {
+    background: var(--blue); color: #fff; padding: 14px 20px;
+    border-bottom: 4px solid var(--orange);
+  }
+  header { display: flex; align-items: center; justify-content: space-between; }
+  #quit { background: transparent; border: 1px solid rgba(255,255,255,.6); padding: 6px 14px; font-size: 13px; }
+  #quit:hover { background: var(--blue-dark); }
+  header h1 { margin: 0; font-size: 19px; font-weight: 600; }
+  header p { margin: 2px 0 0; font-size: 13px; opacity: .8; }
+  main { flex: 1; overflow-y: auto; padding: 20px; }
+  .msg { max-width: 760px; margin: 0 auto 14px; display: flex; }
+  .msg div { padding: 10px 14px; border-radius: 10px; white-space: pre-wrap; }
+  .user { justify-content: flex-end; }
+  .user div { background: var(--blue); color: #fff; border-bottom-right-radius: 2px; }
+  .bot div { background: #fff; border: 1px solid #d5dee8; border-bottom-left-radius: 2px; }
+  .bot .wait { color: var(--muted); font-style: italic; }
+  .sources { display: block; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .sources span {
+    display: inline-block; background: var(--blue-light); color: var(--blue-dark);
+    border-radius: 4px; padding: 1px 7px; margin: 3px 4px 0 0;
+  }
+  form {
+    display: flex; gap: 8px; padding: 12px 20px; background: #fff;
+    border-top: 1px solid #d5dee8;
+  }
+  input {
+    flex: 1; font: inherit; padding: 10px 12px;
+    border: 1px solid #b8c6d6; border-radius: 6px; outline: none;
+  }
+  input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-light); }
+  button {
+    font: inherit; font-weight: 600; padding: 0 20px; border: 0; border-radius: 6px;
+    background: var(--blue); color: #fff; cursor: pointer;
+  }
+  button:hover { background: var(--blue-dark); }
+  button:disabled, input:disabled { opacity: .5; cursor: default; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+  <h1>EasySolar 1600</h1>
+  <p>Assistant hors ligne, d'après le manuel</p>
+  </div>
+  <button id="quit">Quitter</button>
+</header>
+<main id="chat">
+  <div class="msg bot"><div>Bonjour. Posez votre question sur l'EasySolar 1600.</div></div>
+</main>
+<form id="form">
+  <input id="q" placeholder="Votre question" autocomplete="off" autofocus>
+  <button>Envoyer</button>
+</form>
+<script>
+const chat = document.getElementById("chat");
+const form = document.getElementById("form");
+const q = document.getElementById("q");
+
+function add(cls, text) {
+  const row = document.createElement("div");
+  row.className = "msg " + cls;
+  const bubble = document.createElement("div");
+  bubble.textContent = text;
+  row.append(bubble);
+  chat.append(row);
+  chat.scrollTop = chat.scrollHeight;
+  return bubble;
+}
+
+document.getElementById("quit").addEventListener("click", async () => {
+  await fetch("/quit", { method: "POST" });
+  document.body.innerHTML = "<p style='margin:40px auto;color:var(--muted)'>Assistant arrêté. Vous pouvez fermer cette fenêtre.</p>";
+});
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const question = q.value.trim();
+  if (!question) return;
+  add("user", question);
+  q.value = "";
+  form.querySelectorAll("input, button").forEach((el) => el.disabled = true);
+  const bubble = add("bot", "Recherche dans le manuel...");
+  bubble.classList.add("wait");
+  const text = await (await fetch("/ask", { method: "POST", body: question })).text();
+  const [titles, ...answer] = text.split("\n");
+  bubble.classList.remove("wait");
+  bubble.textContent = answer.join("\n");
+  const sources = document.createElement("span");
+  sources.className = "sources";
+  sources.textContent = "Extraits : ";
+  titles.split("\t").forEach((t) => {
+    const chip = document.createElement("span");
+    chip.textContent = t;
+    sources.append(chip);
+  });
+  bubble.append(sources);
+  form.querySelectorAll("input, button").forEach((el) => el.disabled = false);
+  q.focus();
+  chat.scrollTop = chat.scrollHeight;
+});
+</script>
+</body>
+</html>

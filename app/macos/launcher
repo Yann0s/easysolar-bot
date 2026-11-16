@@ -1,0 +1,4 @@
+#!/bin/sh
+# Point d'entrée de EasySolar.app : lance l'interface avec les modèles rangés dans Resources.
+dir="$(dirname "$0")"
+EASYSOLAR_MODELS="$dir/../Resources/models" exec "$dir/easysolar" --ui

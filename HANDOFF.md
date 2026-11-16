@@ -1,4 +1,4 @@
-# EasySolar bot — état du projet (15/11/2026, fin d'après-midi)
+# EasySolar bot — état du projet (16/11/2026)
 
 Assistant de support en français pour l'EasySolar 1600 (manuel Victron), petit LLM local + RAG, à packager ensuite en application autonome (Rust).
 
@@ -32,6 +32,10 @@ Recherche seule (page source dans le top 3, 153 questions de `sft/qa.py`) : BM25
 
 ## Application Rust (`app/`)
 - Un binaire : manuel et consignes compilés dedans, modèles lus dans `models/` à côté de l'exe (ou `$EASYSOLAR_MODELS`). `easysolar` = mode interactif avec invite « > » (Ctrl+D pour quitter), `easysolar questions.txt` = lot, `--search` = pages seulement, `EASYSOLAR_LOG=1` = messages llama.cpp.
+- Interface graphique (16/11) : `easysolar --ui` sert une page HTML aux couleurs Victron (`app/src/ui.html`, compilée dans le binaire) sur `127.0.0.1:8765` (port libre sinon), une requête à la fois. Bouton Quitter = `POST /quit`.
+  Mac : fenêtre native WKWebView reprise de Pulsefy (`app/native/macos_webview.m`, compilée par `app/build.rs`) ; `app/bundle_mac.sh` construit `EasySolar.app` (racine du projet, hors git, 1,6 Go dont les modèles en clones APFS dans `Contents/Resources/models`, lancée via `app/macos/launcher` qui ajoute `--ui`). Icône : `app/macos/icon.py` → `AppIcon.icns`. Non signée : clic droit > Ouvrir sur un autre Mac.
+  Linux : la page s'ouvre dans le navigateur (`xdg-open`) ; le programme tourne jusqu'au bouton Quitter (ou `pkill -x easysolar`).
+  Piège réglé : `exit()` avec les modèles chargés plante sous Linux/Vulkan (segfault dans le destructeur global `vk_instance_t` de ggml, prouvé avec gdb) → Quitter termine la boucle du serveur pour libérer les modèles avant la sortie.
 - Mêmes pages trouvées que `rag.py` sur les 20 questions ; réponses équivalentes (écarts dus au tirage).
 - llama-cpp-2 pris depuis git (rev 955aa2f724) : la version crates.io 0.1.161 n'a pas LFM3. Sans OpenMP.
 - Mac : Metal, binaire de 11 Mo ne dépendant que de frameworks système. Build : `cd app && cargo build --release` (Rust via `brew install rust`).
@@ -67,5 +71,6 @@ Recherche seule (page source dans le top 3, 153 questions de `sft/qa.py`) : BM25
     # LFM3-1.7B-easysolar-Q4_K_M.gguf : pas en ligne, le copier depuis le Mac (models/) dans target/release/models/
     EASYSOLAR_LOG=1 target/release/easysolar --search ../questions.txt 2>&1 | grep easysolar   # ~0,1 s par paragraphe attendu ; ~27 s = même problème que Windows
     target/release/easysolar                                         # mode interactif
+    target/release/easysolar --ui                                    # interface HTML dans le navigateur
 Si un premier build a échoué (paquet manquant) : `cargo clean -p llama-cpp-sys-2 --release` avant de relancer (cache CMake incomplet).
 Sans GPU ou sans Vulkan à la compilation : retirer `features = ["vulkan"]` dans `app/Cargo.toml` (bloc non-macOS) pour un build CPU seul.

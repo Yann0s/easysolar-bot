@@ -2,6 +2,7 @@
 //! Même logique que rag.py, sans serveur : le manuel et les consignes sont compilés dans le binaire.
 //! Usage : easysolar [questions.txt]            (sans fichier : mode interactif avec invite « > », Ctrl+D pour quitter)
 //!         easysolar --search [questions.txt]   (affiche seulement les pages trouvées)
+//!         easysolar --ui                       (interface HTML locale : fenêtre native sur macOS, navigateur ailleurs)
 //! Les modèles sont lus dans le dossier models/ à côté de l'exécutable, ou dans $EASYSOLAR_MODELS.
 //! EASYSOLAR_LOG=1 affiche les messages de llama.cpp (périphériques détectés, etc.).
 use llama_cpp_2::context::LlamaContext;
@@ -12,12 +13,14 @@ use llama_cpp_2::model::LlamaModel;
 use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::sampling::LlamaSampler;
 use std::error::Error;
-use std::io::{BufRead, IsTerminal, Write};
+use std::io::{BufRead, BufReader, IsTerminal, Read, Write};
+use std::net::TcpListener;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 
 const MANUEL: &str = include_str!("../../manuel_fr.md");
 const CONSIGNES: &str = include_str!("../../consignes.txt");
+const UI: &str = include_str!("ui.html");
 const CHAT_MODEL: &str = "LFM3-1.7B-easysolar-Q4_K_M.gguf";
 const EMB_MODEL: &str = "Qwen3-Embedding-0.6B-Q8_0.gguf";
 const TASK: &str = "Instruct: Given a user question about a solar inverter, retrieve the manual page that answers it\nQuery: ";
@@ -27,6 +30,11 @@ const N_CTX: u32 = 8192;
 const EMB_CTX: u32 = 1024; // plus long paragraphe du manuel : 907 tokens
 
 type R<T> = Result<T, Box<dyn Error>>;
+
+#[cfg(target_os = "macos")]
+unsafe extern "C" {
+    fn run_macos_webview(url: *const std::ffi::c_char);
+}
 
 /// Découpe le manuel en sections commençant par « ## » (pages et annexes), comme rag.py.
 fn pages() -> Vec<String> {
@@ -138,8 +146,80 @@ fn generate(ctx: &mut LlamaContext, model: &LlamaModel, prompt: &str) -> R<Strin
     Ok(String::from_utf8_lossy(&out).trim().to_string())
 }
 
+/// Interface HTML locale : GET renvoie la page, POST /ask reçoit la question et renvoie « extraits (tab) \n réponse »,
+/// POST /quit termine la boucle : les modèles sont libérés avant la sortie du programme
+/// (un exit() avec les modèles chargés plante dans le destructeur global de ggml-vulkan).
+/// Une requête à la fois : les contextes llama ne se partagent pas entre threads.
+fn serve(listener: TcpListener, ask: &mut impl FnMut(&str) -> R<(String, Vec<String>)>) -> R<()> {
+    for stream in listener.incoming() {
+        let stream = stream?;
+        let mut reader = BufReader::new(&stream);
+        let mut request = String::new();
+        reader.read_line(&mut request)?;
+        let mut len = 0;
+        loop {
+            let mut header = String::new();
+            reader.read_line(&mut header)?;
+            if header.trim().is_empty() {
+                break;
+            }
+            if let Some(v) = header.to_ascii_lowercase().strip_prefix("content-length:") {
+                len = v.trim().parse()?;
+            }
+        }
+        let mut body = vec![0; len];
+        reader.read_exact(&mut body)?;
+        if request.starts_with("POST /quit") {
+            write!(&stream, "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")?;
+            return Ok(());
+        }
+        let (ctype, content) = if request.starts_with("POST /ask") {
+            let (answer, titles) = ask(String::from_utf8_lossy(&body).trim())?;
+            ("text/plain", format!("{}\n{answer}", titles.join("\t")))
+        } else {
+            ("text/html", UI.to_string())
+        };
+        write!(&stream, "HTTP/1.1 200 OK\r\nContent-Type: {ctype}; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{content}", content.len())?;
+    }
+    Ok(())
+}
+
+/// En mode --ui, le port est ouvert tout de suite : la fenêtre attend que les modèles soient chargés.
+/// Sur macOS, la fenêtre doit tourner sur le thread principal, les modèles et le serveur vont dans un autre thread.
 fn main() -> R<()> {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
+    if !args.iter().any(|a| a == "--ui") {
+        return run(args, None);
+    }
+    args.retain(|a| a != "--ui");
+    let listener = TcpListener::bind(("127.0.0.1", 8765)).or_else(|_| TcpListener::bind(("127.0.0.1", 0)))?;
+    let url = format!("http://127.0.0.1:{}/", listener.local_addr()?.port());
+    eprintln!("Interface : {url}");
+    #[cfg(target_os = "macos")]
+    {
+        std::thread::spawn(move || {
+            let status = match run(args, Some(listener)) {
+                Ok(()) => 0,
+                Err(e) => {
+                    eprintln!("{e}");
+                    1
+                }
+            };
+            std::process::exit(status);
+        });
+        let url = std::ffi::CString::new(url)?;
+        unsafe { run_macos_webview(url.as_ptr()) };
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        std::process::Command::new("xdg-open").arg(&url).spawn()?;
+        run(args, Some(listener))
+    }
+}
+
+fn run(mut args: Vec<String>, listener: Option<TcpListener>) -> R<()> {
+    let ui = listener.is_some();
     let search_only = args.iter().any(|a| a == "--search");
     args.retain(|a| a != "--search");
     let dir = match std::env::var_os("EASYSOLAR_MODELS") {
@@ -150,8 +230,8 @@ fn main() -> R<()> {
         Some(f) => Box::new(std::io::BufReader::new(std::fs::File::open(f)?)),
         None => Box::new(std::io::stdin().lock()),
     };
-    let interactive = args.first().is_none() && std::io::stdin().is_terminal();
-    if interactive {
+    let interactive = !ui && args.first().is_none() && std::io::stdin().is_terminal();
+    if interactive || ui {
         eprintln!("Chargement de l'assistant EasySolar 1600...");
     }
 
@@ -182,6 +262,14 @@ fn main() -> R<()> {
     }
     let chat = if search_only { None } else { Some(LlamaModel::load_from_file(&backend, dir.join(CHAT_MODEL), &gpu)?) };
     let mut chat_ctx = chat.as_ref().map(|m| context(m, &backend, false)).transpose()?;
+    if let Some(listener) = listener {
+        return serve(listener, &mut |question| {
+            let hits = search(&embed(&mut emb_ctx, &emb_model, &format!("{TASK}{question}"))?, &chunks, &vectors, pages.len());
+            let titles = hits.iter().map(|i| pages[*i].lines().next().unwrap().trim_start_matches("## ").to_string()).collect();
+            let answer = generate(chat_ctx.as_mut().unwrap(), chat.as_ref().unwrap(), &prompt(question, &hits, &pages))?;
+            Ok((answer, titles))
+        });
+    }
 
     if interactive {
         eprintln!("Prêt. Posez votre question (Ctrl+D pour quitter).");

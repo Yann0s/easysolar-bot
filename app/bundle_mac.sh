@@ -1,0 +1,13 @@
+#!/bin/sh
+# Construit EasySolar.app à la racine du projet (binaire release + modèles, copiés en clones APFS sans place disque en plus).
+set -e
+cd "$(dirname "$0")"
+cargo build --release
+app=../EasySolar.app
+rm -rf "$app"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources/models"
+cp macos/Info.plist "$app/Contents/"
+cp macos/launcher target/release/easysolar "$app/Contents/MacOS/"
+cp macos/AppIcon.icns "$app/Contents/Resources/"
+cp -c ../models/LFM3-1.7B-easysolar-Q4_K_M.gguf ../models/Qwen3-Embedding-0.6B-Q8_0.gguf "$app/Contents/Resources/models/"
+echo "OK : $(cd .. && pwd)/EasySolar.app"
