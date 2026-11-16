@@ -1,6 +1,6 @@
 //! Assistant hors ligne EasySolar 1600 : recherche par embeddings dans le manuel, puis réponse du modèle fine-tuné.
 //! Même logique que rag.py, sans serveur : le manuel et les consignes sont compilés dans le binaire.
-//! Usage : easysolar [questions.txt]            (sans fichier : une question par ligne sur l'entrée standard)
+//! Usage : easysolar [questions.txt]            (sans fichier : mode interactif avec invite « > », Ctrl+D pour quitter)
 //!         easysolar --search [questions.txt]   (affiche seulement les pages trouvées)
 //! Les modèles sont lus dans le dossier models/ à côté de l'exécutable, ou dans $EASYSOLAR_MODELS.
 //! EASYSOLAR_LOG=1 affiche les messages de llama.cpp (périphériques détectés, etc.).
@@ -12,7 +12,7 @@ use llama_cpp_2::model::LlamaModel;
 use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::sampling::LlamaSampler;
 use std::error::Error;
-use std::io::BufRead;
+use std::io::{BufRead, IsTerminal, Write};
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 
@@ -150,6 +150,10 @@ fn main() -> R<()> {
         Some(f) => Box::new(std::io::BufReader::new(std::fs::File::open(f)?)),
         None => Box::new(std::io::stdin().lock()),
     };
+    let interactive = args.first().is_none() && std::io::stdin().is_terminal();
+    if interactive {
+        eprintln!("Chargement de l'assistant EasySolar 1600...");
+    }
 
     let log = std::env::var_os("EASYSOLAR_LOG").is_some();
     if !log {
@@ -179,7 +183,16 @@ fn main() -> R<()> {
     let chat = if search_only { None } else { Some(LlamaModel::load_from_file(&backend, dir.join(CHAT_MODEL), &gpu)?) };
     let mut chat_ctx = chat.as_ref().map(|m| context(m, &backend, false)).transpose()?;
 
-    for line in input.lines() {
+    if interactive {
+        eprintln!("Prêt. Posez votre question (Ctrl+D pour quitter).");
+    }
+    let mut lines = input.lines();
+    loop {
+        if interactive {
+            print!("\n> ");
+            std::io::stdout().flush()?;
+        }
+        let Some(line) = lines.next() else { break };
         let question = line?.trim().to_string();
         if question.is_empty() {
             continue;
@@ -189,10 +202,17 @@ fn main() -> R<()> {
         match (&chat, &mut chat_ctx) {
             (Some(model), Some(ctx)) => {
                 let answer = generate(ctx, model, &prompt(&question, &hits, &pages))?;
-                println!("## {question}\n\n{answer}\n\n_(extraits : {})_\n", titles.join(", "));
+                if interactive {
+                    println!("{answer}\n(extraits : {})", titles.join(", "));
+                } else {
+                    println!("## {question}\n\n{answer}\n\n_(extraits : {})_\n", titles.join(", "));
+                }
             }
             _ => println!("{question} -> {}", titles.join(", ")),
         }
+    }
+    if interactive {
+        println!();
     }
     Ok(())
 }

@@ -31,7 +31,7 @@ Recherche seule (page source dans le top 3, 153 questions de `sft/qa.py`) : BM25
 - `app/` : application Rust (llama-cpp-2), voir ci-dessous.
 
 ## Application Rust (`app/`)
-- Un binaire : manuel et consignes compilés dedans, modèles lus dans `models/` à côté de l'exe (ou `$EASYSOLAR_MODELS`). `easysolar [questions.txt]`, `--search` = pages seulement, `EASYSOLAR_LOG=1` = messages llama.cpp.
+- Un binaire : manuel et consignes compilés dedans, modèles lus dans `models/` à côté de l'exe (ou `$EASYSOLAR_MODELS`). `easysolar` = mode interactif avec invite « > » (Ctrl+D pour quitter), `easysolar questions.txt` = lot, `--search` = pages seulement, `EASYSOLAR_LOG=1` = messages llama.cpp.
 - Mêmes pages trouvées que `rag.py` sur les 20 questions ; réponses équivalentes (écarts dus au tirage).
 - llama-cpp-2 pris depuis git (rev 955aa2f724) : la version crates.io 0.1.161 n'a pas LFM3. Sans OpenMP.
 - Mac : Metal, binaire de 11 Mo ne dépendant que de frameworks système. Build : `cd app && cargo build --release` (Rust via `brew install rust`).
