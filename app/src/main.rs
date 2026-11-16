@@ -64,12 +64,20 @@ fn chunks(pages: &[String]) -> Vec<(usize, String)> {
     out
 }
 
+/// Threads de calcul : au plus un par cœur. Avec plus de threads que de cœurs, llama.cpp s'effondre
+/// (Windows, 2 cœurs, 4 threads : 156 s par paragraphe au lieu de 0,5 s).
+fn n_threads() -> i32 {
+    std::thread::available_parallelism().map_or(1, |n| n.get()).min(4) as i32
+}
+
 fn context<'a>(model: &'a LlamaModel, backend: &LlamaBackend, embeddings: bool) -> R<LlamaContext<'a>> {
     let n_ctx = if embeddings { EMB_CTX } else { N_CTX };
     let params = LlamaContextParams::default()
         .with_n_ctx(NonZeroU32::new(n_ctx))
         .with_n_batch(n_ctx)
         .with_n_ubatch(if embeddings { n_ctx } else { 512 })
+        .with_n_threads(n_threads())
+        .with_n_threads_batch(n_threads())
         .with_embeddings(embeddings)
         .with_pooling_type(if embeddings { LlamaPoolingType::Last } else { LlamaPoolingType::Unspecified });
     Ok(model.new_context(backend, params)?)
@@ -252,7 +260,7 @@ fn run(mut args: Vec<String>, listener: Option<TcpListener>) -> R<()> {
     let pages = pages();
     let chunks = chunks(&pages);
     if log {
-        eprintln!("[easysolar] {:.1} s : modèle d'embeddings chargé, n_threads = {}", t0.elapsed().as_secs_f32(), LlamaContextParams::default().n_threads());
+        eprintln!("[easysolar] {:.1} s : modèle d'embeddings chargé, n_threads = {}", t0.elapsed().as_secs_f32(), n_threads());
     }
     let mut vectors = Vec::with_capacity(chunks.len());
     for (_, c) in &chunks {
