@@ -35,6 +35,7 @@ Recherche seule (page source dans le top 3, 153 questions de `sft/qa.py`) : BM25
 - Mêmes pages trouvées que `rag.py` sur les 20 questions ; réponses équivalentes (écarts dus au tirage).
 - llama-cpp-2 pris depuis git (rev 955aa2f724) : la version crates.io 0.1.161 n'a pas LFM3. Sans OpenMP.
 - Mac : Metal, binaire de 11 Mo ne dépendant que de frameworks système. Build : `cd app && cargo build --release` (Rust via `brew install rust`).
+- Linux x86_64 : même code, Vulkan si GPU (ex. Radeon intégré du Ryzen 5600G via RADV), sinon CPU ; AVX2 via `target-cpu=x86-64-v3` (`app/.cargo/config.toml`). **Pas encore compilé ni testé** : voir « Installation sur Linux ».
 - Windows : CI GitHub Actions (`.github/workflows/windows.yml`, dépôt privé github.com/Yann0s/easysolar-bot) → artefact `easysolar.exe` (47 Mo, CRT statique) + `vulkan-1.dll`. Vulkan si GPU, sinon CPU.
   Pièges réglés : chemins > 260 caractères (`core.longpaths` + `CARGO_NET_GIT_FETCH_WITH_CLI`) ; llama.cpp en /MD malgré `LLAMA_STATIC_CRT` (CMP0091) → `app/cmake/msvc-static-crt.cmake`.
   Sur le runner sans GPU : mêmes pages que le Mac, **mais ~27 s par appel d'embedding** (démarrage 48 min) → **Windows abandonné le 15/11**, CI désactivé (`gh workflow enable windows` pour reprendre).
@@ -54,3 +55,15 @@ Recherche seule (page source dans le top 3, 153 questions de `sft/qa.py`) : BM25
 ## Installation sur Mac
     brew install llama.cpp poppler uv rust
     mkdir -p bin/llama-b12183 && for t in llama-server llama-cli llama-mtmd-cli llama-tokenize; do ln -sf "$(which $t)" bin/llama-b12183/$t; done
+
+## Installation sur Linux (application Rust, non testé)
+    git clone https://github.com/Yann0s/easysolar-bot && cd easysolar-bot
+    sudo apt install cmake build-essential git libvulkan-dev glslc   # noms Ubuntu ; glslc peut s'appeler shaderc selon la version
+    curl https://sh.rustup.rs -sSf | sh                              # Rust (édition 2024 : Rust >= 1.85)
+    cd app && cargo build --release                                  # compile aussi llama.cpp (Vulkan + CPU), plusieurs minutes
+    mkdir -p target/release/models                                   # modèles à côté de l'exe (ou EASYSOLAR_MODELS=chemin)
+    curl -L -o target/release/models/Qwen3-Embedding-0.6B-Q8_0.gguf https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf
+    # LFM3-1.7B-easysolar-Q4_K_M.gguf : pas en ligne, le copier depuis le Mac (models/) dans target/release/models/
+    EASYSOLAR_LOG=1 target/release/easysolar --search ../questions.txt 2>&1 | grep easysolar   # ~0,1 s par paragraphe attendu ; ~27 s = même problème que Windows
+    target/release/easysolar                                         # mode interactif
+Sans GPU ou sans Vulkan à la compilation : retirer `features = ["vulkan"]` dans `app/Cargo.toml` (bloc non-macOS) pour un build CPU seul.
