@@ -2,7 +2,8 @@
 //! Même logique que rag.py, sans serveur : le manuel et les consignes sont compilés dans le binaire.
 //! Usage : easysolar [questions.txt]            (sans fichier : mode interactif avec invite « > », Ctrl+D pour quitter)
 //!         easysolar --search [questions.txt]   (affiche seulement les pages trouvées)
-//!         easysolar --ui                       (interface HTML locale : fenêtre native sur macOS, navigateur ailleurs)
+//!         easysolar --ui                       (interface HTML locale : fenêtre native sur macOS, fenêtre Edge sous Windows, navigateur ailleurs)
+//! Sous Windows, un double-clic sur easysolar.exe lance l'interface sans console.
 //! Les modèles sont lus dans le dossier models/ à côté de l'exécutable, ou dans $EASYSOLAR_MODELS.
 //! EASYSOLAR_LOG=1 affiche les messages de llama.cpp (périphériques détectés, etc.).
 use llama_cpp_2::context::LlamaContext;
@@ -160,42 +161,69 @@ fn generate(ctx: &mut LlamaContext, model: &LlamaModel, prompt: &str) -> R<Strin
 /// Une requête à la fois : les contextes llama ne se partagent pas entre threads.
 fn serve(listener: TcpListener, ask: &mut impl FnMut(&str) -> R<(String, Vec<String>)>) -> R<()> {
     for stream in listener.incoming() {
-        let stream = stream?;
-        let mut reader = BufReader::new(&stream);
-        let mut request = String::new();
-        reader.read_line(&mut request)?;
-        let mut len = 0;
-        loop {
-            let mut header = String::new();
-            reader.read_line(&mut header)?;
-            if header.trim().is_empty() {
-                break;
-            }
-            if let Some(v) = header.to_ascii_lowercase().strip_prefix("content-length:") {
-                len = v.trim().parse()?;
-            }
+        // une connexion coupée par le navigateur (rechargement, fenêtre fermée) n'arrête pas le serveur
+        match handle(stream?, ask) {
+            Ok(true) => return Ok(()),
+            Ok(false) => {}
+            Err(e) => eprintln!("[easysolar] requête abandonnée : {e}"),
         }
-        let mut body = vec![0; len];
-        reader.read_exact(&mut body)?;
-        if request.starts_with("POST /quit") {
-            write!(&stream, "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")?;
-            return Ok(());
-        }
-        let (ctype, content) = if request.starts_with("POST /ask") {
-            let (answer, titles) = ask(String::from_utf8_lossy(&body).trim())?;
-            ("text/plain", format!("{}\n{answer}", titles.join("\t")))
-        } else {
-            ("text/html", UI.to_string())
-        };
-        write!(&stream, "HTTP/1.1 200 OK\r\nContent-Type: {ctype}; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{content}", content.len())?;
     }
     Ok(())
+}
+
+/// Traite une requête ; renvoie true pour POST /quit.
+fn handle(stream: std::net::TcpStream, ask: &mut impl FnMut(&str) -> R<(String, Vec<String>)>) -> R<bool> {
+    let mut reader = BufReader::new(&stream);
+    let mut request = String::new();
+    reader.read_line(&mut request)?;
+    let mut len = 0;
+    loop {
+        let mut header = String::new();
+        reader.read_line(&mut header)?;
+        if header.trim().is_empty() {
+            break;
+        }
+        if let Some(v) = header.to_ascii_lowercase().strip_prefix("content-length:") {
+            len = v.trim().parse()?;
+        }
+    }
+    let mut body = vec![0; len];
+    reader.read_exact(&mut body)?;
+    if request.starts_with("POST /quit") {
+        write!(&stream, "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")?;
+        return Ok(true);
+    }
+    let (ctype, content) = if request.starts_with("POST /ask") {
+        let (answer, titles) = ask(String::from_utf8_lossy(&body).trim())?;
+        ("text/plain", format!("{}\n{answer}", titles.join("\t")))
+    } else {
+        ("text/html", UI.to_string())
+    };
+    write!(&stream, "HTTP/1.1 200 OK\r\nContent-Type: {ctype}; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{content}", content.len())?;
+    Ok(false)
+}
+
+#[cfg(windows)]
+unsafe extern "system" {
+    fn GetConsoleProcessList(ids: *mut u32, count: u32) -> u32;
+    fn FreeConsole() -> i32;
+}
+
+/// Lancé par double-clic : l'Explorateur crée une console dont ce programme est le seul processus.
+#[cfg(windows)]
+fn double_clicked() -> bool {
+    let mut ids = [0u32; 2];
+    unsafe { GetConsoleProcessList(ids.as_mut_ptr(), 2) == 1 }
 }
 
 /// En mode --ui, le port est ouvert tout de suite : la fenêtre attend que les modèles soient chargés.
 /// Sur macOS, la fenêtre doit tourner sur le thread principal, les modèles et le serveur vont dans un autre thread.
 fn main() -> R<()> {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
+    #[cfg(windows)]
+    if args.is_empty() && double_clicked() {
+        args.push("--ui".into());
+    }
     if !args.iter().any(|a| a == "--ui") {
         return run(args, None);
     }
@@ -219,7 +247,29 @@ fn main() -> R<()> {
         unsafe { run_macos_webview(url.as_ptr()) };
         Ok(())
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    {
+        // Edge en mode application avec son propre profil : le processus vit tant que la fenêtre est ouverte.
+        let profile = std::path::Path::new(&std::env::var("LOCALAPPDATA")?).join("EasySolar").join("edge");
+        let mut edge = std::process::Command::new(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe")
+            .arg(format!("--app={url}"))
+            .arg(format!("--user-data-dir={}", profile.display()))
+            .args(["--window-size=900,700", "--no-first-run", "--no-default-browser-check"])
+            .spawn()?;
+        if double_clicked() {
+            unsafe { FreeConsole() }; // ferme la console ouverte par l'Explorateur
+        }
+        let addr = listener.local_addr()?;
+        std::thread::spawn(move || {
+            let _ = edge.wait();
+            // fenêtre fermée : même arrêt que le bouton Quitter (erreur ignorée si le serveur est déjà arrêté)
+            if let Ok(mut s) = std::net::TcpStream::connect(addr) {
+                let _ = write!(s, "POST /quit HTTP/1.1\r\nContent-Length: 0\r\n\r\n");
+            }
+        });
+        run(args, Some(listener))
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
     {
         use std::process::Stdio; // le navigateur hérite sinon du terminal et y écrit ses propres logs
         std::process::Command::new("xdg-open").arg(&url).stdout(Stdio::null()).stderr(Stdio::null()).spawn()?;

@@ -91,6 +91,7 @@ function add(cls, text) {
 
 document.getElementById("quit").addEventListener("click", async () => {
   await fetch("/quit", { method: "POST" });
+  window.close(); // fenêtre d'application Edge sous Windows ; sans effet dans un onglet de navigateur
   document.body.innerHTML = "<p style='margin:40px auto;color:var(--muted)'>Assistant arrêté. Vous pouvez fermer cette fenêtre.</p>";
 });
 
