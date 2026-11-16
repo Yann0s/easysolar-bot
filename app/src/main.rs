@@ -213,7 +213,8 @@ fn main() -> R<()> {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        std::process::Command::new("xdg-open").arg(&url).spawn()?;
+        use std::process::Stdio; // le navigateur hérite sinon du terminal et y écrit ses propres logs
+        std::process::Command::new("xdg-open").arg(&url).stdout(Stdio::null()).stderr(Stdio::null()).spawn()?;
         run(args, Some(listener))
     }
 }
