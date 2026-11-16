@@ -13,3 +13,6 @@ llama-cpp-sys-2 = { git = "https://github.com/utilityai/llama-cpp-rs", rev = "95
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 llama-cpp-2 = { git = "https://github.com/utilityai/llama-cpp-rs", rev = "955aa2f724", default-features = false, features = ["vulkan"] }
 llama-cpp-sys-2 = { git = "https://github.com/utilityai/llama-cpp-rs", rev = "955aa2f724", default-features = false, features = ["vulkan"] }
+
+[target."cfg(windows)".build-dependencies]
+winresource = "0.1.34"

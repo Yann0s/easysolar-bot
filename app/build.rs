@@ -1,9 +1,15 @@
 //! Sur macOS, compile la fenêtre native (native/macos_webview.m) en bibliothèque statique, comme Pulsefy.
+//! Sous Windows, intègre l'icône (windows/easysolar.ico, générée par macos/icon.py) dans l'exe.
 use std::env;
 use std::path::PathBuf;
 use std::process::Command;
 
 fn main() {
+    #[cfg(windows)]
+    {
+        println!("cargo:rerun-if-changed=windows/easysolar.ico");
+        winresource::WindowsResource::new().set_icon("windows/easysolar.ico").compile().unwrap();
+    }
     if env::var("CARGO_CFG_TARGET_OS").unwrap() != "macos" {
         return;
     }

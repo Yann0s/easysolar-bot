@@ -207,6 +207,7 @@ fn handle(stream: std::net::TcpStream, ask: &mut impl FnMut(&str) -> R<(String, 
 unsafe extern "system" {
     fn GetConsoleProcessList(ids: *mut u32, count: u32) -> u32;
     fn FreeConsole() -> i32;
+    fn SetStdHandle(id: u32, handle: *mut std::ffi::c_void) -> i32;
 }
 
 /// Lancé par double-clic : l'Explorateur crée une console dont ce programme est le seul processus.
@@ -249,19 +250,38 @@ fn main() -> R<()> {
     }
     #[cfg(windows)]
     {
-        // Edge en mode application avec son propre profil : le processus vit tant que la fenêtre est ouverte.
-        let profile = std::path::Path::new(&std::env::var("LOCALAPPDATA")?).join("EasySolar").join("edge");
+        // Edge en mode application : le processus lancé vit tant que la fenêtre est ouverte, à deux conditions
+        // (prouvées sur la VM), sinon il passe la main et se termine, ce qui passerait pour une fermeture :
+        // - un profil propre à ce lancement : avec un profil partagé, un Edge déjà ouvert reprend la fenêtre ;
+        // - sans __COMPAT_LAYER (posé parfois par Windows au double-clic) : avec, Edge se relance sans elle.
+        let dir = std::path::Path::new(&std::env::var("LOCALAPPDATA")?).join("EasySolar");
+        for old in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+            if old.file_name().to_string_lossy().starts_with("edge") {
+                let _ = std::fs::remove_dir_all(old.path()); // profils des lancements précédents
+            }
+        }
+        let profile = dir.join(format!("edge-{}", std::process::id()));
         let mut edge = std::process::Command::new(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe")
             .arg(format!("--app={url}"))
             .arg(format!("--user-data-dir={}", profile.display()))
             .args(["--window-size=900,700", "--no-first-run", "--no-default-browser-check"])
+            .env_remove("__COMPAT_LAYER")
             .spawn()?;
         if double_clicked() {
-            unsafe { FreeConsole() }; // ferme la console ouverte par l'Explorateur
+            // ferme la console ouverte par l'Explorateur ; messages et erreurs vont dans un fichier
+            use std::os::windows::io::IntoRawHandle;
+            std::fs::create_dir_all(&dir)?;
+            let log = std::fs::File::create(dir.join("easysolar.log"))?.into_raw_handle();
+            unsafe {
+                FreeConsole();
+                SetStdHandle(-11i32 as u32, log); // STD_OUTPUT_HANDLE
+                SetStdHandle(-12i32 as u32, log); // STD_ERROR_HANDLE
+            }
         }
         let addr = listener.local_addr()?;
         std::thread::spawn(move || {
             let _ = edge.wait();
+            let _ = std::fs::remove_dir_all(&profile); // échoue si Edge n'a pas fini : nettoyé au lancement suivant
             // fenêtre fermée : même arrêt que le bouton Quitter (erreur ignorée si le serveur est déjà arrêté)
             if let Ok(mut s) = std::net::TcpStream::connect(addr) {
                 let _ = write!(s, "POST /quit HTTP/1.1\r\nContent-Length: 0\r\n\r\n");
