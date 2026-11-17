@@ -18,6 +18,7 @@ Assistant de support en français pour l'EasySolar 1600 (manuel Victron), petit 
 Les scores avant le 15/11 comptaient faux le refus sur « LED Inverter clignote » : vérifié sur le PDF (pages 8-9), aucun état ne fait clignoter Inverter, le refus est la bonne réponse.
 
 Recherche seule (page source dans le top 3, 153 questions de `sft/qa.py`) : BM25 108, embeddings par page 115, **embeddings par paragraphe 126**, fusion BM25 + paragraphes 127 (pas retenue).
+Autres modèles d'embeddings (17/11, même mesure, découpage par paragraphe ; l'appli Rust actuelle donne 131 avec Qwen3-Embedding-0.6B) : EmbeddingGemma 2 Q8_0 120 (121 avec « task: question answering »), LFM2.5-Embedding-350M Q8_0 113 (115 sans préfixe). Vecteurs llama.cpp vérifiés identiques à sentence-transformers (cosinus ≥ 0,999) : pas retenus.
 
 ## Fichiers
 - `pages_corrigees/` : 16 pages transcrites à la main (tableaux, pictogrammes LED, annexes A–D, interrupteur rotatif p24).
