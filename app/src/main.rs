@@ -24,7 +24,7 @@ use std::path::PathBuf;
 const MANUEL: &str = include_str!("../../manuel_fr.md");
 const CONSIGNES: &str = include_str!("../../consignes.txt");
 const UI: &str = include_str!("ui.html");
-const CHAT_MODEL: &str = "LFM3-1.7B-easysolar-Q4_K_M.gguf";
+const CHAT_MODEL: &str = "Qwen3.5-0.8B-easysolar-Q4_K_M.gguf";
 const EMB_MODEL: &str = "Qwen3-Embedding-0.6B-Q8_0.gguf";
 const VECTORS: &str = "paragraphes.bin";
 const TASK: &str = "Instruct: Given a user question about a solar inverter, retrieve the manual page that answers it\nQuery: ";
