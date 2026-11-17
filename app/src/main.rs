@@ -139,15 +139,22 @@ fn search(query: &[f32], chunks: &[(usize, String)], vectors: &[Vec<f32>], n_pag
     order
 }
 
-/// Prompt LFM3 identique à celui de llama-server avec enable_thinking=false (vérifié via /apply-template).
-fn prompt(question: &str, hits: &[usize], pages: &[String]) -> String {
+/// Prompt formaté avec enable_thinking=false (LFM3 ou Qwen3.5 selon le modèle chargé).
+fn prompt(question: &str, hits: &[usize], pages: &[String], is_qwen: bool) -> String {
     let mut sorted = hits.to_vec();
     sorted.sort();
     let extraits: Vec<&str> = sorted.iter().map(|i| pages[*i].as_str()).collect();
-    format!(
-        "<|startoftext|><|im_start|>system\n{CONSIGNES}\n=== EXTRAITS DU MANUEL ===\n{}\n=== FIN ===<|im_end|>\n<|im_start|>user\n{question}<|im_end|>\n<|im_start|>assistant\n<think></think>",
-        extraits.join("\n")
-    )
+    if is_qwen {
+        format!(
+            "<|im_start|>system\n{CONSIGNES}\n=== EXTRAITS DU MANUEL ===\n{}\n=== FIN ===<|im_end|>\n<|im_start|>user\n{question}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
+            extraits.join("\n")
+        )
+    } else {
+        format!(
+            "<|startoftext|><|im_start|>system\n{CONSIGNES}\n=== EXTRAITS DU MANUEL ===\n{}\n=== FIN ===<|im_end|>\n<|im_start|>user\n{question}<|im_end|>\n<|im_start|>assistant\n<think></think>",
+            extraits.join("\n")
+        )
+    }
 }
 
 /// Génère la réponse avec les réglages de rag.py (temp 0.1, top_k 50, top_p 0.1, repeat_penalty 1.05).
@@ -388,13 +395,15 @@ fn run(mut args: Vec<String>, listener: Option<TcpListener>) -> R<()> {
         eprintln!("{} vecteurs écrits dans {}", vectors.len(), path.display());
         return Ok(());
     }
-    let chat = if search_only { None } else { Some(LlamaModel::load_from_file(&backend, dir.join(CHAT_MODEL), &gpu)?) };
+    let chat_name = std::env::var("EASYSOLAR_CHAT_MODEL").unwrap_or_else(|_| CHAT_MODEL.to_string());
+    let is_qwen = chat_name.to_ascii_lowercase().contains("qwen");
+    let chat = if search_only { None } else { Some(LlamaModel::load_from_file(&backend, dir.join(&chat_name), &gpu)?) };
     let mut chat_ctx = chat.as_ref().map(|m| context(m, &backend, false)).transpose()?;
     if let Some(listener) = listener {
         return serve(listener, &mut |question| {
             let hits = search(&embed(&mut emb_ctx, &emb_model, &format!("{TASK}{question}"))?, &chunks, &vectors, pages.len());
             let titles = hits.iter().map(|i| pages[*i].lines().next().unwrap().trim_start_matches("## ").to_string()).collect();
-            let answer = generate(chat_ctx.as_mut().unwrap(), chat.as_ref().unwrap(), &prompt(question, &hits, &pages))?;
+            let answer = generate(chat_ctx.as_mut().unwrap(), chat.as_ref().unwrap(), &prompt(question, &hits, &pages, is_qwen))?;
             Ok((answer, titles))
         });
     }
@@ -417,7 +426,7 @@ fn run(mut args: Vec<String>, listener: Option<TcpListener>) -> R<()> {
         let titles: Vec<&str> = hits.iter().map(|i| pages[*i].lines().next().unwrap().trim_start_matches("## ")).collect();
         match (&chat, &mut chat_ctx) {
             (Some(model), Some(ctx)) => {
-                let answer = generate(ctx, model, &prompt(&question, &hits, &pages))?;
+                let answer = generate(ctx, model, &prompt(&question, &hits, &pages, is_qwen))?;
                 if interactive {
                     println!("{answer}\n(extraits : {})", titles.join(", "));
                 } else {

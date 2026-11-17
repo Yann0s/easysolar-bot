@@ -3,6 +3,7 @@ models/
 .venv/
 bin/
 sft/out/
+sft/out_qwen35/
 sft/llama.cpp/
 app/target/
 __pycache__/
