@@ -53,11 +53,12 @@ Recherche seule (page source dans le top 3, 153 questions de `sft/qa.py`) : BM25
   Sortie redirigée par PowerShell (`>`) : UTF-8 relu en cp850 puis réécrit en UTF-16 ; le binaire écrit bien de l'UTF-8.
 
 - Release v0.1.0 (16/11, dépôt privé) : `EasySolar-Mac.zip` (`app/bundle_mac.sh` puis `ditto -c -k --keepParent EasySolar.app`, signature ad hoc : Gatekeeper refuse « non vérifiée » mais pas « endommagée ») et `EasySolar-Windows.zip` (dossier `EasySolar\` : `EasySolar.exe` compilé sur la VM, `vulkan-1.dll`, `models\`), modèles inclus, ~1,7 Go chacun (limite GitHub : 2 Go par fichier). Tuto d'installation pour débutants dans README.md.
+- Release v0.1.1 (17/11, « latest ») : mêmes zips + `models/paragraphes.bin` ; exe Windows compilé sur la VM (`C:\esb\build.bat`), zips assemblés sur le Mac (`zip -rX` du dossier `EasySolar\`, `ditto` pour l'app).
 
 ## Prochaines étapes
 0. Windows : réactiver le CI (`gh workflow enable windows`) pour vérifier le correctif des threads sur le runner ; build Vulkan local : relancer `cargo build` si le premier échoue (cause non prouvée).
 1. Relire les réponses de `sft/qa.py` (valeurs électriques).
-2. Distribution : le modèle fine-tuné n'est pas en ligne (release GitHub privée ?) ; ajouter `models/paragraphes.bin` dans `EasySolar-Windows.zip` (la release v0.1.0 ne l'a pas).
+2. Distribution : le modèle fine-tuné n'est pas en ligne (release GitHub privée ?) ; publication hors du dépôt privé à décider.
 3. Si réentraînement : 2 passes au lieu de 3 (sur-apprentissage après la 1re).
 
 ## Notes
