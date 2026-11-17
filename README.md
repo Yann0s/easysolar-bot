@@ -4,6 +4,8 @@ Posez vos questions sur l'onduleur-chargeur **Victron EasySolar 1600** en franç
 
 > Les réponses viennent d'une petite intelligence artificielle : en cas de doute, vérifiez toujours dans le manuel la page indiquée.
 
+📄 [Manuel EasySolar 1600 en français (PDF)](Manuel-EasySolar-FR.pdf) — les pages citées par l'assistant sont les numéros imprimés en bas de page.
+
 ---
 
 ## Avant de commencer
