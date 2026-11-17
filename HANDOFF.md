@@ -29,9 +29,11 @@ Recherche seule (page source dans le top 3, 153 questions de `sft/qa.py`) : BM25
 - `models/LFM3-1.7B-easysolar-Q4_K_M.gguf` = modèle retenu (copie : `-bm25`).
 - `resultats_rag_emb_sft.md` : sortie du test du montage actuel (Python) ; `resultats_rust_linux_gpu.md` : même test avec l'appli Rust sous Linux.
 - `app/` : application Rust (llama-cpp-2), voir ci-dessous.
+- `models/paragraphes.bin` : vecteurs des 103 paragraphes (`easysolar --save-vectors`, 412 Ko), à livrer avec les modèles.
 
 ## Application Rust (`app/`)
 - Un binaire : manuel et consignes compilés dedans, modèles lus dans `models/` à côté de l'exe (ou `$EASYSOLAR_MODELS`). `easysolar` = mode interactif avec invite « > » (Ctrl+D pour quitter), `easysolar questions.txt` = lot, `--search` = pages seulement, `EASYSOLAR_LOG=1` = messages llama.cpp.
+- Vecteurs précalculés (17/11) : `easysolar --save-vectors` écrit `models/paragraphes.bin` (empreinte FNV-1a des paragraphes + f32) ; au démarrage, l'appli le lit, et le recalcule en mémoire s'il manque ou ne correspond plus au manuel (message « absent ou périmé »). Elle ne l'écrit jamais d'elle-même (dossier en lecture seule, signature de l'app Mac). `bundle_mac.sh` le régénère et l'embarque. `.gitattributes` force LF sur `manuel_fr.md` : un clone CRLF sous Windows changerait l'empreinte. Mesures (`--search`) : VM Windows CPU 20 questions 71,9 s → 3,5 s, Mac 6,1 s → 0,56 s. Vecteurs calculés sur le Mac (Metal) et utilisés sous Windows (CPU) : mêmes pages sur les 20 questions (un seul échange d'ordre, sans effet), 130/153 pages sources en top 3 avec ou sans fichier (Mac : 131). `flash_attn` déjà actif (auto) ; `llama-bench -fa 1` sur la VM : +3 à 7 % seulement, pas de mise à jour de llama.cpp pour ça.
 - Interface graphique (16/11) : `easysolar --ui` sert une page HTML aux couleurs Victron (`app/src/ui.html`, compilée dans le binaire) sur `127.0.0.1:8765` (port libre sinon), une requête à la fois. Bouton Quitter = `POST /quit`.
   Mac : fenêtre native WKWebView reprise de Pulsefy (`app/native/macos_webview.m`, compilée par `app/build.rs`) ; `app/bundle_mac.sh` construit `EasySolar.app` (racine du projet, hors git, 1,6 Go dont les modèles en clones APFS dans `Contents/Resources/models`, lancée via `app/macos/launcher` qui ajoute `--ui`). Icône : `app/macos/icon.py` → `AppIcon.icns`. Non signée : clic droit > Ouvrir sur un autre Mac.
   Linux : la page s'ouvre dans le navigateur (`xdg-open`, sorties redirigées vers /dev/null : sinon Chrome écrit ses logs « zygote ... Broken pipe » dans le terminal, sans conséquence) ; le programme tourne jusqu'au bouton Quitter (ou `pkill -x easysolar` ; pas `pkill -f "easysolar --ui"` dans une commande ssh, qui tue sa propre session).
@@ -55,7 +57,7 @@ Recherche seule (page source dans le top 3, 153 questions de `sft/qa.py`) : BM25
 ## Prochaines étapes
 0. Windows : réactiver le CI (`gh workflow enable windows`) pour vérifier le correctif des threads sur le runner ; build Vulkan local : relancer `cargo build` si le premier échoue (cause non prouvée).
 1. Relire les réponses de `sft/qa.py` (valeurs électriques).
-2. Distribution : le modèle fine-tuné n'est pas en ligne (release GitHub privée ?) ; précalculer les vecteurs des paragraphes pour accélérer le démarrage sur CPU.
+2. Distribution : le modèle fine-tuné n'est pas en ligne (release GitHub privée ?) ; ajouter `models/paragraphes.bin` dans `EasySolar-Windows.zip` (la release v0.1.0 ne l'a pas).
 3. Si réentraînement : 2 passes au lieu de 3 (sur-apprentissage après la 1re).
 
 ## Notes
@@ -76,6 +78,7 @@ Recherche seule (page source dans le top 3, 153 questions de `sft/qa.py`) : BM25
     curl -L -o target/release/models/Qwen3-Embedding-0.6B-Q8_0.gguf https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf
     # LFM3-1.7B-easysolar-Q4_K_M.gguf : pas en ligne, le copier depuis le Mac (models/) dans target/release/models/
     EASYSOLAR_LOG=1 target/release/easysolar --search ../questions.txt 2>&1 | grep easysolar   # ~0,1 s par paragraphe attendu ; ~27 s = même problème que Windows
+    target/release/easysolar --save-vectors                          # vecteurs des paragraphes (ou copier models/paragraphes.bin du Mac)
     target/release/easysolar                                         # mode interactif
     target/release/easysolar --ui                                    # interface HTML dans le navigateur
 Si un premier build a échoué (paquet manquant) : `cargo clean -p llama-cpp-sys-2 --release` avant de relancer (cache CMake incomplet).

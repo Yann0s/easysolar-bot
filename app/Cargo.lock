@@ -31,7 +31,7 @@ dependencies = [
 
 [[package]]
 name = "easysolar"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "llama-cpp-2",
  "llama-cpp-sys-2",

@@ -2,8 +2,10 @@
 //! Même logique que rag.py, sans serveur : le manuel et les consignes sont compilés dans le binaire.
 //! Usage : easysolar [questions.txt]            (sans fichier : mode interactif avec invite « > », Ctrl+D pour quitter)
 //!         easysolar --search [questions.txt]   (affiche seulement les pages trouvées)
+//!         easysolar --save-vectors             (calcule les vecteurs des paragraphes et les écrit dans models/paragraphes.bin)
 //!         easysolar --ui                       (interface HTML locale : fenêtre native sur macOS, fenêtre Edge sous Windows, navigateur ailleurs)
 //! Sous Windows, un double-clic sur easysolar.exe lance l'interface sans console.
+//! Les vecteurs des paragraphes sont lus dans models/paragraphes.bin ; s'il est absent ou périmé, ils sont recalculés au démarrage.
 //! Les modèles sont lus dans le dossier models/ à côté de l'exécutable, ou dans $EASYSOLAR_MODELS.
 //! EASYSOLAR_LOG=1 affiche les messages de llama.cpp (périphériques détectés, etc.).
 use llama_cpp_2::context::LlamaContext;
@@ -24,6 +26,7 @@ const CONSIGNES: &str = include_str!("../../consignes.txt");
 const UI: &str = include_str!("ui.html");
 const CHAT_MODEL: &str = "LFM3-1.7B-easysolar-Q4_K_M.gguf";
 const EMB_MODEL: &str = "Qwen3-Embedding-0.6B-Q8_0.gguf";
+const VECTORS: &str = "paragraphes.bin";
 const TASK: &str = "Instruct: Given a user question about a solar inverter, retrieve the manual page that answers it\nQuery: ";
 const TOP_K: usize = 3;
 const MAX_TOKENS: usize = 300;
@@ -94,6 +97,33 @@ fn embed(ctx: &mut LlamaContext, model: &LlamaModel, text: &str) -> R<Vec<f32>> 
     let v = ctx.embeddings_seq_ith(0)?;
     let norm = v.iter().map(|x| x * x).sum::<f32>().sqrt();
     Ok(v.iter().map(|x| x / norm).collect())
+}
+
+/// Empreinte FNV-1a des paragraphes : écarte un fichier de vecteurs calculé pour un autre manuel.
+fn fingerprint(chunks: &[(usize, String)]) -> u64 {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in chunks.iter().flat_map(|(_, c)| c.bytes().chain([0])) {
+        h = (h ^ b as u64).wrapping_mul(0x100000001b3);
+    }
+    h
+}
+
+/// Écrit l'empreinte puis les vecteurs (f32 little-endian, à la suite).
+fn save_vectors(path: &std::path::Path, chunks: &[(usize, String)], vectors: &[Vec<f32>]) -> R<()> {
+    let mut bytes = fingerprint(chunks).to_le_bytes().to_vec();
+    bytes.extend(vectors.iter().flatten().flat_map(|x| x.to_le_bytes()));
+    Ok(std::fs::write(path, bytes)?)
+}
+
+/// Vecteurs écrits par save_vectors ; None si le fichier manque ou ne correspond pas aux paragraphes.
+fn load_vectors(path: &std::path::Path, chunks: &[(usize, String)]) -> Option<Vec<Vec<f32>>> {
+    let bytes = std::fs::read(path).ok()?;
+    let (head, data) = bytes.split_at_checked(8)?;
+    if u64::from_le_bytes(head.try_into().ok()?) != fingerprint(chunks) || data.is_empty() || data.len() % (4 * chunks.len()) != 0 {
+        return None;
+    }
+    let floats: Vec<f32> = data.chunks_exact(4).map(|b| f32::from_le_bytes(b.try_into().unwrap())).collect();
+    Some(floats.chunks(floats.len() / chunks.len()).map(<[f32]>::to_vec).collect())
 }
 
 /// Les k pages dont le meilleur paragraphe est le plus proche de la question.
@@ -300,7 +330,8 @@ fn main() -> R<()> {
 fn run(mut args: Vec<String>, listener: Option<TcpListener>) -> R<()> {
     let ui = listener.is_some();
     let search_only = args.iter().any(|a| a == "--search");
-    args.retain(|a| a != "--search");
+    let save = args.iter().any(|a| a == "--save-vectors");
+    args.retain(|a| a != "--search" && a != "--save-vectors");
     let dir = match std::env::var_os("EASYSOLAR_MODELS") {
         Some(d) => PathBuf::from(d),
         None => std::env::current_exe()?.parent().unwrap().join("models"),
@@ -332,12 +363,30 @@ fn run(mut args: Vec<String>, listener: Option<TcpListener>) -> R<()> {
     if log {
         eprintln!("[easysolar] {:.1} s : modèle d'embeddings chargé, n_threads = {}", t0.elapsed().as_secs_f32(), n_threads());
     }
-    let mut vectors = Vec::with_capacity(chunks.len());
-    for (_, c) in &chunks {
-        vectors.push(embed(&mut emb_ctx, &emb_model, c)?);
-        if log && vectors.len() <= 3 {
-            eprintln!("[easysolar] {:.1} s : paragraphe {} vectorisé", t0.elapsed().as_secs_f32(), vectors.len());
+    let path = dir.join(VECTORS);
+    let vectors = match load_vectors(&path, &chunks).filter(|_| !save) {
+        Some(v) => v,
+        None => {
+            if !save {
+                eprintln!("[easysolar] {} absent ou périmé : calcul des vecteurs des paragraphes", path.display());
+            }
+            let mut vectors = Vec::with_capacity(chunks.len());
+            for (_, c) in &chunks {
+                vectors.push(embed(&mut emb_ctx, &emb_model, c)?);
+                if log && vectors.len() <= 3 {
+                    eprintln!("[easysolar] {:.1} s : paragraphe {} vectorisé", t0.elapsed().as_secs_f32(), vectors.len());
+                }
+            }
+            vectors
         }
+    };
+    if log {
+        eprintln!("[easysolar] {:.1} s : {} vecteurs prêts", t0.elapsed().as_secs_f32(), vectors.len());
+    }
+    if save {
+        save_vectors(&path, &chunks, &vectors)?;
+        eprintln!("{} vecteurs écrits dans {}", vectors.len(), path.display());
+        return Ok(());
     }
     let chat = if search_only { None } else { Some(LlamaModel::load_from_file(&backend, dir.join(CHAT_MODEL), &gpu)?) };
     let mut chat_ctx = chat.as_ref().map(|m| context(m, &backend, false)).transpose()?;
