@@ -16,15 +16,15 @@ Posez vos questions sur l'onduleur-chargeur **Victron EasySolar 1600** en franç
 | Ordinateur | processeur Intel depuis 2013 ou AMD depuis 2015 | puce Apple (M1, M2, M3, M4...) |
 | Navigateur | Microsoft Edge (déjà installé sur Windows) | rien à installer |
 | Mémoire | 8 Go recommandés | 8 Go recommandés |
-| Place libre | 4 Go (2 Go après installation) | 4 Go (2 Go après installation) |
+| Place libre | 2,5 Go (1,2 Go après installation) | 2,5 Go (1,2 Go après installation) |
 
-Le dépôt est privé : il faut un **compte GitHub** et une **invitation** du propriétaire. Acceptez l'invitation reçue par e-mail, puis connectez-vous sur [github.com](https://github.com).
+Le dépôt est public : aucun compte GitHub n'est nécessaire pour télécharger l'application.
 
 ---
 
 ## Installation sur Windows
 
-1. **Télécharger** — Ouvrez la [page de téléchargement](https://github.com/Yann0s/easysolar-bot/releases/latest) et cliquez sur **EasySolar-Windows.zip** (1,7 Go, quelques minutes).
+1. **Télécharger** — Ouvrez la [page de téléchargement](https://github.com/Yann0s/easysolar-bot/releases/latest) et cliquez sur **EasySolar-Windows.zip** (1,1 Go, quelques minutes).
 2. **Extraire** — Dans le dossier *Téléchargements*, faites un clic droit sur **EasySolar-Windows.zip** puis **Extraire tout...** → **Extraire**. Un dossier **EasySolar** apparaît.
    ⚠️ Ne lancez pas l'application depuis l'intérieur du zip : elle ne trouverait pas ses fichiers.
 3. **Ranger** *(facultatif)* — Déplacez le dossier **EasySolar** où vous voulez, par exemple dans *Documents*.
@@ -38,7 +38,7 @@ Le dépôt est privé : il faut un **compte GitHub** et une **invitation** du pr
 
 ## Installation sur Mac
 
-1. **Télécharger** — Ouvrez la [page de téléchargement](https://github.com/Yann0s/easysolar-bot/releases/latest) et cliquez sur **EasySolar-Mac.zip** (1,7 Go, quelques minutes).
+1. **Télécharger** — Ouvrez la [page de téléchargement](https://github.com/Yann0s/easysolar-bot/releases/latest) et cliquez sur **EasySolar-Mac.zip** (1,1 Go, quelques minutes).
 2. **Décompresser** — Dans le dossier *Téléchargements*, double-cliquez sur **EasySolar-Mac.zip** : l'application **EasySolar** apparaît.
 3. **Ranger** — Faites glisser **EasySolar** dans le dossier **Applications**.
 4. **Lancer** — Double-cliquez sur **EasySolar** dans *Applications*.
